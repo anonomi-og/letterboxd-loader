@@ -5,8 +5,9 @@ WORKDIR /app
 COPY fetch_export.py /app/fetch_export.py
 COPY logger.py       /app/logger.py
 
-# Deps: playwright runtime is preinstalled in the base image; add our libs
-RUN pip install --no-cache-dir python-dotenv==1.0.1 PyMySQL==1.1.1
+# Install deps (include playwright explicitly)
+RUN pip install --no-cache-dir playwright==1.47.0 python-dotenv==1.0.1 PyMySQL==1.1.1
 
+# Browsers are already present in this base image
 ENV PYTHONUNBUFFERED=1
 CMD ["python", "/app/fetch_export.py"]

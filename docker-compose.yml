@@ -8,7 +8,7 @@ services:
   lbx-exporter:
     build:
       context: .
-      dockerfile: Dockerfile.playwright
+      dockerfile: playwright.dockerfile
     env_file: .env
     volumes:
       - ./data:/data         # /data/exports and /data/state live here
@@ -17,7 +17,7 @@ services:
   lbx-loader:
     build:
       context: .
-      dockerfile: Dockerfile.loader
+      dockerfile: loader.dockerfile
     env_file: .env
     volumes:
       - ./data:/data
