@@ -1,8 +1,6 @@
-version: "3.9"
-
 networks:
   lbxnet:
-    external: true   # create once with: docker network create lbxnet
+    external: true   # docker network create lbxnet (one-time)
 
 services:
   lbx-exporter:
@@ -11,7 +9,7 @@ services:
       dockerfile: playwright.dockerfile
     env_file: .env
     volumes:
-      - ./data:/data         # /data/exports and /data/state live here
+      - ./data:/data
     networks: [lbxnet]
 
   lbx-loader:
@@ -22,3 +20,19 @@ services:
     volumes:
       - ./data:/data
     networks: [lbxnet]
+
+  lbx-justwatch:
+    build:
+      context: .
+      dockerfile: justwatch.dockerfile
+    env_file: .env               # reuses your DB + JW_* settings
+    networks: [lbxnet]
+    restart: "no"                # run-once job; call it when you want
+    # optional: if you want logs or shared files, uncomment:
+    # volumes:
+    #   - ./data:/data
+    # optional: tweak batch and sleep without editing code:
+    # environment:
+    #   - JW_BATCH_SIZE=500
+    #   - JW_RECHECK_DAYS=7
+    #   - JW_SLEEP_S=0.8
