@@ -46,8 +46,20 @@ DB = dict(
     autocommit=True,
 )
 
-# ---------------- SQL ----------------
+# ---------------- Utils ----------------
+def g(obj, *names):
+    """Get first non-empty value by attribute or dict key from obj."""
+    for n in names:
+        if isinstance(obj, dict):
+            if n in obj and obj[n] not in (None, ""):
+                return obj[n]
+        else:
+            v = getattr(obj, n, None)
+            if v not in (None, ""):
+                return v
+    return None
 
+# ---------------- SQL ----------------
 def get_source_cfg():
     source = JW_SOURCE
     table  = JW_SOURCE_TABLE or ("watchlist" if source == "WATCHLIST" else "diary")
@@ -105,7 +117,6 @@ VALUES (%s, %s, %s, %s, %s, %s, NOW(), NULL);
 """
 
 # ---------------- Helpers ----------------
-
 def pick_best_match(results, title, year):
     """
     Heuristic:
@@ -123,8 +134,11 @@ def pick_best_match(results, title, year):
 
     scored = []
     for r in results or []:
-        r_title = r.get("title") or r.get("original_title") or r.get("name") or ""
-        r_year  = r.get("year") or r.get("original_release_year") or (r.get("original_release_date") or "")[:4]
+        r_title = g(r, "title", "original_title", "name") or ""
+        r_year  = g(r, "year", "original_release_year")
+        if not r_year:
+            od = g(r, "original_release_date")
+            r_year = (od or "")[:4] if od else None
         try:
             r_year = int(r_year) if r_year else None
         except Exception:
@@ -137,15 +151,11 @@ def pick_best_match(results, title, year):
             if y and r_year == y:
                 score += 10
                 via = "name_year"
-            else:
-                via = "name_only"
         elif tnorm and tnorm in norm(r_title):
             score += 3
             if y and r_year and abs(r_year - y) <= 1:
                 score += 2
                 via = "name_year"
-            else:
-                via = "name_only"
 
         scored.append((score, via, r_year, r_title, r))
 
@@ -154,9 +164,9 @@ def pick_best_match(results, title, year):
 
     scored.sort(key=lambda x: x[0], reverse=True)
     score, via, r_year, r_title, r = scored[0]
-    matched_type = "MOVIE" if (r.get("object_type") or r.get("type") or "").upper().startswith("MOVIE") else "SHOW"
+    obj_type = (g(r, "object_type", "type") or "").upper()
+    matched_type = "MOVIE" if obj_type.startswith("MOVIE") else "SHOW"
     confidence = max(0, min(100, score * 5))  # simple 0–100
-
     return r, via, confidence, matched_type
 
 def fetch_offers(entry_id: str):
@@ -170,22 +180,27 @@ def fetch_offers(entry_id: str):
         log_to_db(PROJECT_NAME, "WARNING", f"offers_for_countries failed for {entry_id}: {e}")
         return []
 
-    # The lib may return a dict keyed by country or a flat list — handle both.
-    if isinstance(raw, dict):
-        offers = raw.get(COUNTRY, []) or []
-    else:
-        offers = raw or []
+    # raw may be dict keyed by country or a flat list
+    offers = raw.get(COUNTRY, []) if isinstance(raw, dict) else (raw or [])
 
     out = []
     for off in offers:
-        prov_id = off.get("provider_id")
-        prov_nm = off.get("provider_name") or None  # some feeds include this; if not, we'll default later
-        pres    = off.get("presentation_type")
-        url     = (off.get("urls") or {}).get("standard_web") or off.get("url")
+        provider_id       = g(off, "provider_id", "providerId")
+        provider_name     = g(off, "provider_name", "providerName")
+        presentation_type = g(off, "presentation_type", "presentationType")
+        urls              = g(off, "urls")
+        url = None
+        if isinstance(urls, dict):
+            url = urls.get("standard_web") or urls.get("deeplink_web") or urls.get("url")
+        elif urls:
+            # if urls is an object with attributes
+            url = getattr(urls, "standard_web", None) or getattr(urls, "deeplink_web", None) or getattr(urls, "url", None)
+        if not url:
+            url = g(off, "url")
         out.append({
-            "provider_id": prov_id,
-            "provider_name": prov_nm,
-            "presentation_type": pres,
+            "provider_id": provider_id,
+            "provider_name": provider_name,
+            "presentation_type": presentation_type,
             "url": url
         })
     return out
@@ -215,7 +230,6 @@ def upsert_offer_history_watchlist(conn, watchlist_id, entry_id, provider_id, pr
             ))
 
 # ---------------- Core ----------------
-
 def update_one(conn, row, cur_source):
     """
     row: {source_row_id, title, year}
@@ -246,13 +260,16 @@ def update_one(conn, row, cur_source):
         log_to_db(PROJECT_NAME, "WARNING", f"No match selected for {title} ({year})")
         return
 
-    entry_id = best.get("id") or best.get("jw_entity_id") or best.get("jwId") or best.get("jw_id")
+    entry_id = g(best, "id", "jw_entity_id", "jwId", "jw_id")
     if not entry_id:
         log_to_db(PROJECT_NAME, "WARNING", f"Matched item missing entry_id for {title}")
         return
 
-    matched_title = best.get("title") or best.get("original_title") or best.get("name") or title
-    matched_year  = best.get("year") or best.get("original_release_year") or (best.get("original_release_date") or "")[:4]
+    matched_title = g(best, "title", "original_title", "name") or title
+    matched_year  = g(best, "year", "original_release_year")
+    if not matched_year:
+        od = g(best, "original_release_date")
+        matched_year = (od or "")[:4] if od else None
     try:
         matched_year = int(matched_year) if matched_year else None
     except Exception:
