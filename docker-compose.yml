@@ -36,3 +36,10 @@ services:
     #   - JW_BATCH_SIZE=500
     #   - JW_RECHECK_DAYS=7
     #   - JW_SLEEP_S=0.8
+
+  lbx-enrich:
+    build:
+      context: .
+      dockerfile: enrich.dockerfile
+    env_file: .env
+    networks: [lbxnet]

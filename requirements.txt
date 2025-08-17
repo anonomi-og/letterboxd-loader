@@ -1,5 +1,7 @@
-playwright==1.47.0
-python-dotenv==1.0.1
-PyMySQL==1.1.1
-simple-justwatch-python-api 
-httpx
+playwright==1.47.0          # for fetch_export.py
+python-dotenv==1.0.1        # shared .env handling
+PyMySQL==1.1.1              # DB connections
+simple-justwatch-python-api # JW search/offers
+httpx==0.27.2               # JW lib dependency (explicit)
+
+requests==2.32.3            # TMDb + OMDb API calls (enrich)
